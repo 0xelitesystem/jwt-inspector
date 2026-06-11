@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JWT Inspector</title>
+<style>
+:root {
+  --bg: #fafaf6;
+  --surface: #ffffff;
+  --ink: #0a1d1e;
+  --ink-soft: #2c4a4c;
+  --rule: #c8d4d3;
+  --teal: #0f5c60;
+  --teal-deep: #0a4548;
+  --gold: #b07d2a;
+  --gold-deep: #8a611f;
+  --ok: #1a5c2e;
+  --warn: #8a5a00;
+  --err: #8b1a1a;
+  --code-bg: #f0ebe1;
+  --header: #b03d8f;
+  --payload: #2660a8;
+  --signature: #3a6b1f;
+}
+[data-theme="dark"] {
+  --bg: #0c1c1d;
+  --surface: #14292a;
+  --ink: #e8ebe6;
+  --ink-soft: #b0c0bd;
+  --rule: #2a4042;
+  --teal: #4ab4ba;
+  --teal-deep: #6dc8ce;
+  --gold: #d4a155;
+  --gold-deep: #e6b876;
+  --ok: #6dd380;
+  --warn: #d4a155;
+  --err: #e88080;
+  --code-bg: #0a1718;
+  --header: #d97ab8;
+  --payload: #6da8e0;
+  --signature: #8ec870;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: ui-serif, Georgia, "Times New Roman", serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  padding: 2rem 1rem;
+  line-height: 1.55;
+}
+.wrap { max-width: 1100px; margin: 0 auto; }
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 2px solid var(--teal);
+  padding-bottom: 1rem;
+  margin-bottom: 2rem;
+}
+h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--teal);
+}
+.tag {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.75rem;
+  color: var(--gold-deep);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+[data-theme="dark"] .tag { color: var(--gold); }
+.theme-btn {
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
+  padding: 0.4rem 0.85rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.theme-btn:hover { border-color: var(--teal); color: var(--teal); }
+.lede {
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+  margin-bottom: 1.75rem;
+  max-width: 60ch;
+}
+.input-box {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  padding: 1.25rem;
+  margin-bottom: 1.75rem;
+  border-radius: 3px;
+}
+label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft);
+  display: block;
+  margin-bottom: 0.5rem;
+}
+textarea {
+  width: 100%;
+  min-height: 120px;
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  padding: 0.85rem;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  resize: vertical;
+  border-radius: 2px;
+}
+textarea:focus { outline: 2px solid var(--teal); outline-offset: 1px; }
+.input-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+button {
+  font-family: inherit;
+  font-size: 0.85rem;
+  padding: 0.6rem 1.1rem;
+  border: 1px solid var(--rule);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: 2px;
+}
+button:hover { border-color: var(--teal); }
+button.primary {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: var(--surface);
+  font-weight: 600;
+}
+[data-theme="dark"] button.primary {
+  color: var(--bg) !important;
+}
+button.primary:hover { background: var(--teal-deep); border-color: var(--teal-deep); }
+.results { display: none; }
+.results.show { display: block; }
+.section {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  border-radius: 3px;
+}
+.section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.85rem;
+}
+.section-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.color-chip {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-right: 0.45rem;
+  vertical-align: middle;
+  border-radius: 1px;
+}
+.chip-h { background: var(--header); }
+.chip-p { background: var(--payload); }
+.chip-s { background: var(--signature); }
+pre {
+  background: var(--code-bg);
+  padding: 0.85rem;
+  border-radius: 2px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+  color: var(--ink);
+}
+.token-display {
+  background: var(--code-bg);
+  padding: 0.85rem;
+  border-radius: 2px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.78rem;
+  line-height: 1.7;
+  word-break: break-all;
+  white-space: pre-wrap;
+  margin-bottom: 1.5rem;
+}
+.token-display .h-part { color: var(--header); }
+.token-display .p-part { color: var(--payload); }
+.token-display .s-part { color: var(--signature); }
+.claims {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.45rem 1.25rem;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 0.85rem;
+  margin-top: 0.85rem;
+}
+.claim-key { color: var(--ink-soft); }
+.claim-val { color: var(--ink); word-break: break-all; }
+.claim-note {
+  grid-column: 1 / -1;
+  font-family: ui-serif, Georgia, serif;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  font-style: italic;
+  padding-left: 0;
+  margin-top: 0.15rem;
+}
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: center;
+  font-size: 0.85rem;
+}
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.dot {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+}
+.dot-ok { background: var(--ok); }
+.dot-warn { background: var(--warn); }
+.dot-err { background: var(--err); }
+.error-msg {
+  color: var(--err);
+  font-size: 0.85rem;
+  margin-top: 0.85rem;
+  padding: 0.65rem;
+  background: var(--code-bg);
+  border-left: 3px solid var(--err);
+  border-radius: 2px;
+}
+.verify-row {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.85rem;
+}
+.verify-row textarea { min-height: 70px; }
+footer {
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+footer a { color: var(--teal); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+.privacy-note {
+  font-size: 0.78rem;
+  color: var(--gold-deep);
+  margin-top: 0.5rem;
+}
+[data-theme="dark"] .privacy-note { color: var(--gold); }
+@media (max-width: 640px) {
+  body { padding: 1rem 0.75rem; }
+  h1 { font-size: 1.4rem; }
+  .claims { grid-template-columns: 1fr; gap: 0.15rem 0; }
+  .claim-key { font-size: 0.75rem; margin-top: 0.4rem; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>JWT Inspector</h1>
+    <div class="tag">Decode and verify in your browser</div>
+  </div>
+  <button class="theme-btn" id="theme-toggle" type="button">Dark</button>
+</header>
+
+<p class="lede">Paste a JSON Web Token to see its header, payload, and signature. Optionally paste a public key or shared secret to verify the signature. Nothing leaves this page.</p>
+
+<div class="input-box">
+  <label for="jwt-input">Token</label>
+  <textarea id="jwt-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkphbmUgRG9lIiwiaWF0IjoxNzAwMDAwMDAwfQ.example" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+  <div class="input-row">
+    <button class="primary" id="decode-btn" type="button">Decode</button>
+    <button id="sample-btn" type="button">Load sample</button>
+    <button id="clear-btn" type="button">Clear</button>
+  </div>
+  <div class="privacy-note">All decoding happens locally. The token is never sent to any server.</div>
+</div>
+
+<div class="results" id="results">
+  <div class="section">
+    <div class="section-head">
+      <div class="section-title">Token (color-coded by part)</div>
+    </div>
+    <div class="token-display" id="token-display"></div>
+    <div class="status-row">
+      <div class="status-item"><span class="dot" id="format-dot"></span><span id="format-status">Format</span></div>
+      <div class="status-item"><span class="dot" id="expiry-dot"></span><span id="expiry-status">Expiry</span></div>
+      <div class="status-item"><span class="dot" id="sig-dot"></span><span id="sig-status">Signature</span></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <div class="section-title"><span class="color-chip chip-h"></span>Header</div>
+    </div>
+    <pre id="header-json"></pre>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <div class="section-title"><span class="color-chip chip-p"></span>Payload claims</div>
+    </div>
+    <div class="claims" id="claims"></div>
+    <pre id="payload-json" style="margin-top: 0.85rem;"></pre>
+  </div>
+
+  <div class="section">
+    <div class="section-head">
+      <div class="section-title"><span class="color-chip chip-s"></span>Signature verification</div>
+    </div>
+    <p style="font-size: 0.85rem; color: var(--ink-soft);">Paste the public key (RS/ES/PS algorithms) or shared secret (HS algorithms) to verify the signature.</p>
+    <div class="verify-row">
+      <div>
+        <label for="key-input">Public key or secret</label>
+        <textarea id="key-input" placeholder="-----BEGIN PUBLIC KEY-----&#10;...&#10;-----END PUBLIC KEY-----&#10;&#10;or for HS256: just the shared secret string" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+      </div>
+      <div>
+        <button class="primary" id="verify-btn" type="button">Verify signature</button>
+      </div>
+    </div>
+    <div id="verify-result" style="margin-top: 1rem; font-size: 0.85rem;"></div>
+  </div>
+</div>
+
+<div id="error-box"></div>
+
+<footer>
+  <div>JWT Inspector. Open source, MIT licensed. <a href="https://github.com/0xelitesystem/jwt-inspector" target="_blank" rel="noopener">View source</a>.</div>
+  <div>For RFC 7519 compliant JWTs.</div>
+</footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+// Theme toggle
+const themeBtn = $("theme-toggle");
+function setTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  themeBtn.textContent = t === "dark" ? "Light" : "Dark";
+}
+themeBtn.addEventListener("click", () => {
+  const cur = document.documentElement.getAttribute("data-theme") || "light";
+  setTheme(cur === "dark" ? "light" : "dark");
+});
+
+// Base64url decode
+function b64uDecode(s) {
+  s = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  const decoded = atob(s);
+  const bytes = new Uint8Array(decoded.length);
+  for (let i = 0; i < decoded.length; i++) bytes[i] = decoded.charCodeAt(i);
+  return new TextDecoder("utf-8").decode(bytes);
+}
+function b64uDecodeBytes(s) {
+  s = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  const decoded = atob(s);
+  const bytes = new Uint8Array(decoded.length);
+  for (let i = 0; i < decoded.length; i++) bytes[i] = decoded.charCodeAt(i);
+  return bytes;
+}
+function b64uEncode(bytes) {
+  let s = "";
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+const STANDARD_CLAIMS = {
+  iss: "Issuer",
+  sub: "Subject",
+  aud: "Audience",
+  exp: "Expiration time",
+  nbf: "Not before",
+  iat: "Issued at",
+  jti: "JWT ID",
+};
+
+function fmtTimestamp(v) {
+  if (typeof v !== "number") return null;
+  const d = new Date(v * 1000);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+function decode() {
+  $("error-box").innerHTML = "";
+  const token = $("jwt-input").value.trim();
+  if (!token) {
+    showError("Paste a token to decode.");
+    return;
+  }
+
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    showError(`A JWT has 3 parts separated by dots. This input has ${parts.length} part(s).`);
+    return;
+  }
+
+  let header, payload;
+  try {
+    header = JSON.parse(b64uDecode(parts[0]));
+  } catch (e) {
+    showError("Header is not valid base64url-encoded JSON. " + e.message);
+    return;
+  }
+  try {
+    payload = JSON.parse(b64uDecode(parts[1]));
+  } catch (e) {
+    showError("Payload is not valid base64url-encoded JSON. " + e.message);
+    return;
+  }
+
+  // Token display with color coding
+  $("token-display").innerHTML =
+    `<span class="h-part">${escapeHtml(parts[0])}</span>` +
+    `<span style="color: var(--ink-soft);">.</span>` +
+    `<span class="p-part">${escapeHtml(parts[1])}</span>` +
+    `<span style="color: var(--ink-soft);">.</span>` +
+    `<span class="s-part">${escapeHtml(parts[2])}</span>`;
+
+  // Header
+  $("header-json").textContent = JSON.stringify(header, null, 2);
+
+  // Payload claims breakdown
+  const claimsEl = $("claims");
+  claimsEl.innerHTML = "";
+  for (const k of Object.keys(payload)) {
+    const v = payload[k];
+    const keyDiv = document.createElement("div");
+    keyDiv.className = "claim-key";
+    keyDiv.textContent = k;
+    const valDiv = document.createElement("div");
+    valDiv.className = "claim-val";
+    valDiv.textContent = typeof v === "object" ? JSON.stringify(v) : String(v);
+    claimsEl.appendChild(keyDiv);
+    claimsEl.appendChild(valDiv);
+
+    // Add note for known claims with timestamps
+    if (["exp", "nbf", "iat"].includes(k)) {
+      const ts = fmtTimestamp(v);
+      if (ts) {
+        const note = document.createElement("div");
+        note.className = "claim-note";
+        note.textContent = `${STANDARD_CLAIMS[k]}: ${ts}`;
+        claimsEl.appendChild(note);
+      }
+    } else if (STANDARD_CLAIMS[k]) {
+      const note = document.createElement("div");
+      note.className = "claim-note";
+      note.textContent = STANDARD_CLAIMS[k];
+      claimsEl.appendChild(note);
+    }
+  }
+
+  $("payload-json").textContent = JSON.stringify(payload, null, 2);
+
+  // Status indicators
+  setDot("format-dot", "ok");
+  $("format-status").textContent = "Format: valid 3-part JWT";
+
+  // Expiry check
+  if (payload.exp) {
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.exp < now) {
+      setDot("expiry-dot", "err");
+      $("expiry-status").textContent = `Expired ${humanDelta(now - payload.exp)} ago`;
+    } else {
+      setDot("expiry-dot", "ok");
+      $("expiry-status").textContent = `Expires in ${humanDelta(payload.exp - now)}`;
+    }
+  } else {
+    setDot("expiry-dot", "warn");
+    $("expiry-status").textContent = "No exp claim";
+  }
+
+  // Signature: not verified yet
+  setDot("sig-dot", "warn");
+  $("sig-status").textContent = "Signature: not verified (paste key below)";
+
+  $("results").classList.add("show");
+}
+
+function setDot(id, state) {
+  const el = $(id);
+  el.className = "dot dot-" + state;
+}
+
+function humanDelta(seconds) {
+  seconds = Math.abs(seconds);
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  if (seconds < 86400 * 30) return `${Math.floor(seconds / 86400)}d`;
+  return `${Math.floor(seconds / 86400 / 30)}mo`;
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function showError(msg) {
+  $("error-box").innerHTML = `<div class="error-msg">${escapeHtml(msg)}</div>`;
+  $("results").classList.remove("show");
+}
+
+// Verify signature
+async function verify() {
+  const resultEl = $("verify-result");
+  resultEl.innerHTML = "";
+
+  const token = $("jwt-input").value.trim();
+  const keyText = $("key-input").value.trim();
+  if (!token || !keyText) {
+    resultEl.innerHTML = `<div class="error-msg">Need both token and key/secret.</div>`;
+    return;
+  }
+
+  const parts = token.split(".");
+  if (parts.length !== 3) {
+    resultEl.innerHTML = `<div class="error-msg">Token must have 3 parts.</div>`;
+    return;
+  }
+
+  let header;
+  try {
+    header = JSON.parse(b64uDecode(parts[0]));
+  } catch (e) {
+    resultEl.innerHTML = `<div class="error-msg">Header decode failed.</div>`;
+    return;
+  }
+
+  const alg = (header.alg || "").toUpperCase();
+  if (!alg) {
+    resultEl.innerHTML = `<div class="error-msg">Header has no alg field.</div>`;
+    return;
+  }
+
+  if (alg === "NONE") {
+    resultEl.innerHTML = `<div class="error-msg">Algorithm is "none". This token has no signature; treat as unverifiable. Some libraries accept "none" by default which is a vulnerability.</div>`;
+    setDot("sig-dot", "err");
+    $("sig-status").textContent = "Signature: alg=none (unsafe)";
+    return;
+  }
+
+  const data = new TextEncoder().encode(parts[0] + "." + parts[1]);
+  const sigBytes = b64uDecodeBytes(parts[2]);
+
+  try {
+    let valid = false;
+    if (alg.startsWith("HS")) {
+      const hashName = "SHA-" + alg.slice(2);
+      const key = await crypto.subtle.importKey(
+        "raw",
+        new TextEncoder().encode(keyText),
+        { name: "HMAC", hash: hashName },
+        false,
+        ["verify"]
+      );
+      valid = await crypto.subtle.verify("HMAC", key, sigBytes, data);
+    } else if (alg.startsWith("RS")) {
+      const hashName = "SHA-" + alg.slice(2);
+      const key = await importPemKey(keyText, { name: "RSASSA-PKCS1-v1_5", hash: hashName });
+      valid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, sigBytes, data);
+    } else if (alg.startsWith("PS")) {
+      const hashName = "SHA-" + alg.slice(2);
+      const key = await importPemKey(keyText, { name: "RSA-PSS", hash: hashName });
+      valid = await crypto.subtle.verify({ name: "RSA-PSS", saltLength: parseInt(alg.slice(2)) / 8 }, key, sigBytes, data);
+    } else if (alg.startsWith("ES")) {
+      const sizeMap = { ES256: { hash: "SHA-256", curve: "P-256" }, ES384: { hash: "SHA-384", curve: "P-384" }, ES512: { hash: "SHA-512", curve: "P-521" } };
+      const cfg = sizeMap[alg];
+      if (!cfg) throw new Error("Unsupported ES algorithm: " + alg);
+      const key = await importPemKey(keyText, { name: "ECDSA", namedCurve: cfg.curve });
+      valid = await crypto.subtle.verify({ name: "ECDSA", hash: cfg.hash }, key, sigBytes, data);
+    } else {
+      throw new Error("Unsupported algorithm: " + alg);
+    }
+
+    if (valid) {
+      resultEl.innerHTML = `<div style="color: var(--ok); font-weight: 600;">Signature is valid (${alg})</div>`;
+      setDot("sig-dot", "ok");
+      $("sig-status").textContent = `Signature: valid (${alg})`;
+    } else {
+      resultEl.innerHTML = `<div style="color: var(--err); font-weight: 600;">Signature is invalid</div>`;
+      setDot("sig-dot", "err");
+      $("sig-status").textContent = `Signature: INVALID (${alg})`;
+    }
+  } catch (e) {
+    resultEl.innerHTML = `<div class="error-msg">Verification failed: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function importPemKey(pem, algo) {
+  pem = pem.trim();
+  if (pem.includes("-----BEGIN")) {
+    const b64 = pem
+      .replace(/-----BEGIN [^-]+-----/g, "")
+      .replace(/-----END [^-]+-----/g, "")
+      .replace(/\s+/g, "");
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    return crypto.subtle.importKey("spki", bytes, algo, false, ["verify"]);
+  }
+  // Assume raw base64
+  const bytes = Uint8Array.from(atob(pem.replace(/\s+/g, "")), (c) => c.charCodeAt(0));
+  return crypto.subtle.importKey("spki", bytes, algo, false, ["verify"]);
+}
+
+// Sample
+$("sample-btn").addEventListener("click", () => {
+  $("jwt-input").value = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkphbmUgRG9lIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE5MDAwMDAwMDB9.K2WWUyCUZSEOPLA0G9qVflWUYwT7g8GRsFQXg2lFEFc";
+  $("key-input").value = "your-256-bit-secret";
+});
+
+$("clear-btn").addEventListener("click", () => {
+  $("jwt-input").value = "";
+  $("key-input").value = "";
+  $("results").classList.remove("show");
+  $("error-box").innerHTML = "";
+});
+
+$("decode-btn").addEventListener("click", decode);
+$("verify-btn").addEventListener("click", verify);
+
+// Decode on Enter inside textarea (Cmd/Ctrl+Enter)
+$("jwt-input").addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") decode();
+});
+
+// Initial theme: default to light
+setTheme("light");
+</script>
+</body>
+</html>
