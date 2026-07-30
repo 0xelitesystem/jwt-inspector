@@ -23,7 +23,7 @@ Supported algorithms for verification:
 - `PS256`, `PS384`, `PS512` (RSA-PSS, paste public key in PEM format)
 - `ES256`, `ES384`, `ES512` (ECDSA, paste public key in PEM format)
 
-The tool warns if the token uses `alg: none` since this is a known vulnerability when libraries accept it by default.
+The tool warns as soon as you decode a token that uses `alg: none`, since this is a known vulnerability when libraries accept it by default. It also warns when the header says `HS*` (HMAC) but the key you pasted is a PEM key, which is the RS256-to-HS256 algorithm confusion forgery.
 
 ## Why this exists
 

@@ -408,7 +408,9 @@ function b64uEncode(bytes) {
   return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-const STANDARD_CLAIMS = {
+// Null-prototype so a claim named "constructor" or "__proto__" cannot
+// resolve to an inherited Object.prototype member.
+const STANDARD_CLAIMS = Object.assign(Object.create(null), {
   iss: "Issuer",
   sub: "Subject",
   aud: "Audience",
@@ -416,13 +418,27 @@ const STANDARD_CLAIMS = {
   nbf: "Not before",
   iat: "Issued at",
   jti: "JWT ID",
-};
+});
+
+function claimLabel(k) {
+  return Object.prototype.hasOwnProperty.call(STANDARD_CLAIMS, k) ? STANDARD_CLAIMS[k] : null;
+}
 
 function fmtTimestamp(v) {
   if (typeof v !== "number") return null;
   const d = new Date(v * 1000);
   if (isNaN(d.getTime())) return null;
   return d.toISOString();
+}
+
+// RFC 7519 NumericDate. Returns a finite number or null.
+function toNumericDate(v) {
+  if (typeof v === "number") return isFinite(v) ? v : null;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    return isFinite(n) ? n : null;
+  }
+  return null;
 }
 
 function decode() {
@@ -467,7 +483,14 @@ function decode() {
   // Payload claims breakdown
   const claimsEl = $("claims");
   claimsEl.innerHTML = "";
-  for (const k of Object.keys(payload)) {
+  const payloadIsObject = payload !== null && typeof payload === "object";
+  if (!payloadIsObject) {
+    const note = document.createElement("div");
+    note.className = "claim-note";
+    note.textContent = "Payload is valid JSON but not a JSON object, so it carries no claims.";
+    claimsEl.appendChild(note);
+  }
+  for (const k of payloadIsObject ? Object.keys(payload) : []) {
     const v = payload[k];
     const keyDiv = document.createElement("div");
     keyDiv.className = "claim-key";
@@ -484,13 +507,13 @@ function decode() {
       if (ts) {
         const note = document.createElement("div");
         note.className = "claim-note";
-        note.textContent = `${STANDARD_CLAIMS[k]}: ${ts}`;
+        note.textContent = `${claimLabel(k)}: ${ts}`;
         claimsEl.appendChild(note);
       }
-    } else if (STANDARD_CLAIMS[k]) {
+    } else if (claimLabel(k)) {
       const note = document.createElement("div");
       note.className = "claim-note";
-      note.textContent = STANDARD_CLAIMS[k];
+      note.textContent = claimLabel(k);
       claimsEl.appendChild(note);
     }
   }
@@ -502,23 +525,41 @@ function decode() {
   $("format-status").textContent = "Format: valid 3-part JWT";
 
   // Expiry check
-  if (payload.exp) {
-    const now = Math.floor(Date.now() / 1000);
-    if (payload.exp < now) {
-      setDot("expiry-dot", "err");
-      $("expiry-status").textContent = `Expired ${humanDelta(now - payload.exp)} ago`;
-    } else {
-      setDot("expiry-dot", "ok");
-      $("expiry-status").textContent = `Expires in ${humanDelta(payload.exp - now)}`;
-    }
-  } else {
+  const expRaw = payloadIsObject ? payload.exp : undefined;
+  const expNum = toNumericDate(expRaw);
+  if (expRaw === undefined || expRaw === null) {
     setDot("expiry-dot", "warn");
     $("expiry-status").textContent = "No exp claim";
+  } else if (expNum === null) {
+    setDot("expiry-dot", "warn");
+    $("expiry-status").textContent = "exp is not a numeric date";
+  } else {
+    const now = Math.floor(Date.now() / 1000);
+    if (expNum < now) {
+      setDot("expiry-dot", "err");
+      $("expiry-status").textContent = `Expired ${humanDelta(now - expNum)} ago`;
+    } else {
+      setDot("expiry-dot", "ok");
+      $("expiry-status").textContent = `Expires in ${humanDelta(expNum - now)}`;
+    }
   }
 
-  // Signature: not verified yet
-  setDot("sig-dot", "warn");
-  $("sig-status").textContent = "Signature: not verified (paste key below)";
+  // Signature: not verified yet. Clear any result left over from a previous
+  // token, and flag alg=none here rather than only on the verify path (an
+  // alg=none token has no key to paste, so verify() is never reached).
+  $("verify-result").innerHTML = "";
+  const headerAlg =
+    header !== null && typeof header === "object" && typeof header.alg === "string"
+      ? header.alg.trim().toUpperCase()
+      : "";
+  if (headerAlg === "NONE") {
+    setDot("sig-dot", "err");
+    $("sig-status").textContent = "Signature: alg=none (unsafe)";
+    $("verify-result").innerHTML = `<div class="error-msg">Algorithm is "none". This token has no signature; treat as unverifiable. Some libraries accept "none" by default which is a vulnerability.</div>`;
+  } else {
+    setDot("sig-dot", "warn");
+    $("sig-status").textContent = "Signature: not verified (paste key below)";
+  }
 
   $("results").classList.add("show");
 }
@@ -572,11 +613,12 @@ async function verify() {
     return;
   }
 
-  const alg = (header.alg || "").toUpperCase();
-  if (!alg) {
-    resultEl.innerHTML = `<div class="error-msg">Header has no alg field.</div>`;
+  const algRaw = header !== null && typeof header === "object" ? header.alg : undefined;
+  if (typeof algRaw !== "string" || algRaw.trim() === "") {
+    resultEl.innerHTML = `<div class="error-msg">Header has no usable alg field. It must be a string.</div>`;
     return;
   }
+  const alg = algRaw.trim().toUpperCase();
 
   if (alg === "NONE") {
     resultEl.innerHTML = `<div class="error-msg">Algorithm is "none". This token has no signature; treat as unverifiable. Some libraries accept "none" by default which is a vulnerability.</div>`;
@@ -586,11 +628,24 @@ async function verify() {
   }
 
   const data = new TextEncoder().encode(parts[0] + "." + parts[1]);
-  const sigBytes = b64uDecodeBytes(parts[2]);
+  let sigBytes;
+  try {
+    sigBytes = b64uDecodeBytes(parts[2]);
+  } catch (e) {
+    resultEl.innerHTML = `<div class="error-msg">Signature is not valid base64url. ${escapeHtml(e.message)}</div>`;
+    return;
+  }
 
+  let confusionWarning = "";
   try {
     let valid = false;
     if (alg.startsWith("HS")) {
+      if (keyText.indexOf("-----BEGIN") !== -1) {
+        confusionWarning =
+          `<div class="error-msg">Algorithm confusion: the header says ${escapeHtml(alg)}, which is HMAC, ` +
+          `but the key you pasted is a PEM key. A token that verifies this way was signed with the public key ` +
+          `as a shared secret, which is the classic RS256-to-HS256 forgery. Do not trust it.</div>`;
+      }
       const hashName = "SHA-" + alg.slice(2);
       const key = await crypto.subtle.importKey(
         "raw",
@@ -619,11 +674,15 @@ async function verify() {
     }
 
     if (valid) {
-      resultEl.innerHTML = `<div style="color: var(--ok); font-weight: 600;">Signature is valid (${alg})</div>`;
-      setDot("sig-dot", "ok");
-      $("sig-status").textContent = `Signature: valid (${alg})`;
+      resultEl.innerHTML =
+        `<div style="color: var(--ok); font-weight: 600;">Signature is valid (${escapeHtml(alg)})</div>` + confusionWarning;
+      setDot("sig-dot", confusionWarning ? "err" : "ok");
+      $("sig-status").textContent = confusionWarning
+        ? `Signature: alg confusion (${alg})`
+        : `Signature: valid (${alg})`;
     } else {
-      resultEl.innerHTML = `<div style="color: var(--err); font-weight: 600;">Signature is invalid</div>`;
+      resultEl.innerHTML =
+        `<div style="color: var(--err); font-weight: 600;">Signature is invalid</div>` + confusionWarning;
       setDot("sig-dot", "err");
       $("sig-status").textContent = `Signature: INVALID (${alg})`;
     }
@@ -649,7 +708,7 @@ async function importPemKey(pem, algo) {
 
 // Sample
 $("sample-btn").addEventListener("click", () => {
-  $("jwt-input").value = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkphbmUgRG9lIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE5MDAwMDAwMDB9.K2WWUyCUZSEOPLA0G9qVflWUYwT7g8GRsFQXg2lFEFc";
+  $("jwt-input").value = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkphbmUgRG9lIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjE5MDAwMDAwMDB9.cHuiAN-kROBle91Tyu05tyrX-uSH5hz4iuyPZhFrBgg";
   $("key-input").value = "your-256-bit-secret";
 });
 
